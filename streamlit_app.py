@@ -1,151 +1,100 @@
-import streamlit as st
+import dash
+import dash_bootstrap_components as dbc
+from dash import html, dcc, Input, Output, State
+import plotly.express as px
 import pandas as pd
-import math
-from pathlib import Path
 
-# Set the title and favicon that appear in the Browser's tab bar.
-st.set_page_config(
-    page_title='GDP dashboard',
-    page_icon=':earth_americas:', # This is an emoji shortcode. Could be a URL too.
-)
+# Sample data for dummy chart
+df = pd.DataFrame({
+    "x": range(10),
+    "y": [i ** 1.5 for i in range(10)]
+})
+fig = px.line(df, x="x", y="y", title="Dummy Chart")
+fig.update_layout(template="plotly_dark", paper_bgcolor="black", plot_bgcolor="black")
 
-# -----------------------------------------------------------------------------
-# Declare some useful functions.
-
-@st.cache_data
-def get_gdp_data():
-    """Grab GDP data from a CSV file.
-
-    This uses caching to avoid having to read the file every time. If we were
-    reading from an HTTP endpoint instead of a file, it's a good idea to set
-    a maximum age to the cache with the TTL argument: @st.cache_data(ttl='1d')
-    """
-
-    # Instead of a CSV on disk, you could read from an HTTP endpoint here too.
-    DATA_FILENAME = Path(__file__).parent/'data/gdp_data.csv'
-    raw_gdp_df = pd.read_csv(DATA_FILENAME)
-
-    MIN_YEAR = 1960
-    MAX_YEAR = 2022
-
-    # The data above has columns like:
-    # - Country Name
-    # - Country Code
-    # - [Stuff I don't care about]
-    # - GDP for 1960
-    # - GDP for 1961
-    # - GDP for 1962
-    # - ...
-    # - GDP for 2022
-    #
-    # ...but I want this instead:
-    # - Country Name
-    # - Country Code
-    # - Year
-    # - GDP
-    #
-    # So let's pivot all those year-columns into two: Year and GDP
-    gdp_df = raw_gdp_df.melt(
-        ['Country Code'],
-        [str(x) for x in range(MIN_YEAR, MAX_YEAR + 1)],
-        'Year',
-        'GDP',
+# Define a news card component (dummy content)
+def news_card(headline, snippet, sentiment, link):
+    return dbc.Card(
+        dbc.CardBody([
+            html.H5(headline, className="card-title", style={"color": "white"}),
+            html.P(snippet, className="card-text", style={"color": "lightgray"}),
+            dbc.Button("→", color="secondary", size="sm", href=link, target="_blank"),
+            html.Div(f"Sentiment: {sentiment}", style={"color": "lightgreen", "marginTop": "10px"})
+        ]),
+        style={"marginBottom": "10px", "backgroundColor": "#222222", "border": "none"}
     )
 
-    # Convert years from string to integers
-    gdp_df['Year'] = pd.to_numeric(gdp_df['Year'])
-
-    return gdp_df
-
-gdp_df = get_gdp_data()
-
-# -----------------------------------------------------------------------------
-# Draw the actual page
-
-# Set the title that appears at the top of the page.
-'''
-# :earth_americas: GDP dashboard
-
-Browse GDP data from the [World Bank Open Data](https://data.worldbank.org/) website. As you'll
-notice, the data only goes to 2022 right now, and datapoints for certain years are often missing.
-But it's otherwise a great (and did I mention _free_?) source of data.
-'''
-
-# Add some spacing
-''
-''
-
-min_value = gdp_df['Year'].min()
-max_value = gdp_df['Year'].max()
-
-from_year, to_year = st.slider(
-    'Which years are you interested in?',
-    min_value=min_value,
-    max_value=max_value,
-    value=[min_value, max_value])
-
-countries = gdp_df['Country Code'].unique()
-
-if not len(countries):
-    st.warning("Select at least one country")
-
-selected_countries = st.multiselect(
-    'Which countries would you like to view?',
-    countries,
-    ['DEU', 'FRA', 'GBR', 'BRA', 'MEX', 'JPN'])
-
-''
-''
-''
-
-# Filter the data
-filtered_gdp_df = gdp_df[
-    (gdp_df['Country Code'].isin(selected_countries))
-    & (gdp_df['Year'] <= to_year)
-    & (from_year <= gdp_df['Year'])
+# Sample news cards list
+news_cards = [
+    news_card("Market Rally", "Stocks surged amid strong earnings reports.", "Positive", "https://example.com/story1"),
+    news_card("Economic Update", "Inflation numbers show signs of stabilizing.", "Neutral", "https://example.com/story2"),
+    news_card("Tech News", "A major tech firm announces a new product line.", "Positive", "https://example.com/story3"),
 ]
 
-st.header('GDP over time', divider='gray')
+# Chatbot dummy messages container (for now static)
+chat_history = html.Div(id="chat-history", children=[
+    html.Div("Bot: Welcome to Trading AI. How can I help you today?", style={"color": "lightblue", "padding": "5px"})
+], style={"height": "100%", "overflowY": "auto", "padding": "10px", "backgroundColor": "#333333", "borderRadius": "5px"})
 
-''
-
-st.line_chart(
-    filtered_gdp_df,
-    x='Year',
-    y='GDP',
-    color='Country Code',
+# Chat input area
+chat_input = dbc.InputGroup(
+    [
+        dbc.Input(id="chat-input", placeholder="Ask a question...", type="text", style={"backgroundColor": "#444", "color": "white"}),
+        dbc.Button("Send", id="send-btn", color="primary")
+    ],
+    className="mt-2"
 )
 
-''
-''
+# Create the main layout
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.DARKLY])
+app.title = "Trading AI Dashboard"
 
+app.layout = dbc.Container(fluid=True, style={"padding": "0", "backgroundColor": "black", "height": "100vh"}, children=[
+    dbc.Row([
+        # Left Section: Merged first two columns with dummy chart
+        dbc.Col(
+            dcc.Graph(figure=fig, style={"height": "100vh"}),
+            width=8, style={"padding": "0"}
+        ),
+        # Right Section: Divided into two vertical parts
+        dbc.Col([
+            # Top: News cards area (top two rows merged) with hidden y-overflow if necessary
+            html.Div(
+                news_cards,
+                id="news-container",
+                style={
+                    "height": "65vh",
+                    "overflowY": "auto",
+                    "padding": "10px",
+                    "backgroundColor": "#111111",
+                    "borderBottom": "1px solid #444"
+                }
+            ),
+            # Bottom: Chatbot UI
+            html.Div([
+                chat_history,
+                chat_input
+            ],
+            id="chat-container",
+            style={
+                "height": "35vh",
+                "padding": "10px",
+                "backgroundColor": "#111111"
+            })
+        ], width=4, style={"padding": "0", "display": "flex", "flexDirection": "column", "height": "100vh"})
+    ], style={"height": "100vh", "margin": "0"})
+])
 
-first_year = gdp_df[gdp_df['Year'] == from_year]
-last_year = gdp_df[gdp_df['Year'] == to_year]
+# Dummy callback to clear input after send (extend functionality later)
+@app.callback(
+    Output("chat-input", "value"),
+    Input("send-btn", "n_clicks"),
+    State("chat-input", "value"),
+    prevent_initial_call=True
+)
+def handle_send(n_clicks, message):
+    # Here you would normally process the message and update the chat history
+    return ""
 
-st.header(f'GDP in {to_year}', divider='gray')
-
-''
-
-cols = st.columns(4)
-
-for i, country in enumerate(selected_countries):
-    col = cols[i % len(cols)]
-
-    with col:
-        first_gdp = first_year[first_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-        last_gdp = last_year[last_year['Country Code'] == country]['GDP'].iat[0] / 1000000000
-
-        if math.isnan(first_gdp):
-            growth = 'n/a'
-            delta_color = 'off'
-        else:
-            growth = f'{last_gdp / first_gdp:,.2f}x'
-            delta_color = 'normal'
-
-        st.metric(
-            label=f'{country} GDP',
-            value=f'{last_gdp:,.0f}B',
-            delta=growth,
-            delta_color=delta_color
-        )
+if __name__ == '__main__':
+    app.run(debug=True, use_reloader=False, dev_tools_ui=False, dev_tools_hot_reload=False)
