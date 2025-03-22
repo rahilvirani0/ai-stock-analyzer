@@ -4,8 +4,6 @@ yfinance
 numpy
 matplotlib
 plotly
-keras==2.10
-tensorflow==2.10
+keras
+tensorflow
 scikit-learn
-tensorflow-metadata
-tensorflow-datasets
