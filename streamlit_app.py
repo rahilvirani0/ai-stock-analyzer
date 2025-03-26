@@ -1,4 +1,3 @@
-# streamlit_app.py
 import streamlit as st
 import yfinance as yf
 import numpy as np
@@ -52,7 +51,7 @@ class StockForecaster:
         model_folder = "stock-models"
         model_filename = f"{ticker}_fine_tuned_model_{today_str}.h5"
         model_path = os.path.join(model_folder, model_filename)
-
+        
         if not os.path.exists(model_path):
             st.info(f"Retraining model for {ticker} ({today_str})...")
             result = retrain_stock_model(
@@ -150,16 +149,16 @@ if st.sidebar.button("Forecast"):
             st.error("Not enough data.")
             st.stop()
         stock_data, scaled_data = forecaster.prepare_data(stock_data)
-
+    
     if not forecaster.load_or_retrain_model(selected_ticker):
         st.error("Model loading/retraining failed.")
         st.stop()
-
+    
     base_forecast = forecaster.generate_forecast(stock_data, scaled_data, forecast_days=forecast_horizon)
     if base_forecast is None:
         st.error("Forecast generation failed.")
         st.stop()
-
+    
     # Backtest model accuracy using a 30-day backtest window
     rmse, mape = backtest_model_accuracy(
         forecaster.model,
@@ -168,7 +167,7 @@ if st.sidebar.button("Forecast"):
         time_step=forecaster.time_step,
         forecast_horizon=30
     )
-
+    
     # Prepare data for the interactive chart: plot full historical data and forecast
     forecast_dates = pd.date_range(start=stock_data.index[-1] + timedelta(days=1), periods=forecast_horizon)
     df_hist = pd.DataFrame({'Price': stock_data['Close'].values.flatten()}, index=stock_data.index)
@@ -179,13 +178,13 @@ if st.sidebar.button("Forecast"):
         forecastColor = '#39FF14'
     elif metrics['current_price'] > metrics['forecast_price']:
         forecastColor = '#ff1818'
-
+    
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=df_hist.index, y=df_hist['Price'],
                              mode='lines', name="Historical", line=dict(color='#6a6a6a')))
     fig.add_trace(go.Scatter(x=df_forecast.index, y=df_forecast['Price'],
                              mode='lines', name="Forecast", line=dict(color=forecastColor)))
-
+    
         # --- Add News Sentiment Markers on Historical Data ---
     from news_sentiment import analyze_news
     news_results = analyze_news(selected_ticker)
@@ -193,24 +192,27 @@ if st.sidebar.button("Forecast"):
     news_markers = []
     for news in news_results:
         try:
-            news_date = datetime.strptime(news["date"], "%Y-%m-%d").date()
+            news_date = datetime.strptime(news["date"], "%Y-%m-%d")
         except Exception:
             continue
-        # Only include news that fall within the historical data range and are trading days.
-        if pd.to_datetime(news_date) in stock_data.index:
-            price_at_date = stock_data.loc[pd.to_datetime(news_date), "Close"]
-            news_markers.append({"date": pd.to_datetime(news_date), "price": price_at_date, "news": news})
-
+        # Only include news that fall within the historical data range.
+        if news_date < stock_data.index[0] or news_date > stock_data.index[-1]:
+            continue
+        # Find the closest date in the historical index.
+        nearest_date = min(stock_data.index, key=lambda d: abs(d - news_date))
+        price_at_date = stock_data.loc[nearest_date, "Close"]
+        news_markers.append({"date": nearest_date, "price": price_at_date, "news": news})
+    
     # Group news markers by date to handle overlapping markers.
     from collections import defaultdict
     grouped_markers = defaultdict(list)
     for marker in news_markers:
         grouped_markers[marker["date"]].append(marker)
-
+    
     # Define a small offset based on price range.
     price_range = stock_data["Close"].max() - stock_data["Close"].min()
     offset_step = price_range * 0.01  # increased offset step for better visibility
-
+    
     # For each date group, add markers with a vertical offset.
     for date, markers in grouped_markers.items():
         n = len(markers)
@@ -244,6 +246,7 @@ if st.sidebar.button("Forecast"):
                 )
             ))
 
+    
     first_visible = stock_data.index[-1] - pd.Timedelta(days=forecast_horizon)
     last_visible = forecast_dates[-1]
     fig.update_layout(
@@ -253,7 +256,7 @@ if st.sidebar.button("Forecast"):
         height=500
     )
     st.plotly_chart(fig, use_container_width=True)
-
+    
     # --- Forecast Summary Section ---
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("Forecast Summary")
@@ -267,12 +270,12 @@ if st.sidebar.button("Forecast"):
     with col3:
         st.metric("Risk Assessment", metrics['risk_assessment'])
         st.metric("Model Accuracy", f"RMSE: ${rmse:.2f}, MAPE: {mape:.2f}%")
-
+    
     # --- News Sentiment Summary ---
     from news_sentiment import compute_overall_sentiment
     overall_sentiment = compute_overall_sentiment(news_results)
     st.markdown(f"**News Sentiment Summary:** {overall_sentiment}")
-
+    
     # --- Detailed News Section ---
     if news_results:
         st.subheader("News Details")
