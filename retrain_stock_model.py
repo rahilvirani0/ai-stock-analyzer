@@ -1,3 +1,4 @@
+# retrain_stock_model.py
 import yfinance as yf
 import numpy as np
 import pandas as pd
@@ -16,14 +17,14 @@ tf.config.run_functions_eagerly(True)
 def retrain_stock_model(base_model_path, target_ticker, epochs=8, time_step=100, model_folder='stock-models'):
     """
     Retrain a pre-trained stock model for a specific ticker.
-    
+
     Parameters:
       - base_model_path: Path to the pre-trained base model.
       - target_ticker: Stock ticker symbol to fine-tune for.
       - epochs: Number of training epochs.
       - time_step: Sequence length for the LSTM.
       - model_folder: Folder to store all fine-tuned models.
-    
+
     Returns:
       - A dict with training history, test loss, ticker, and model path on success.
       - False if retraining fails.
