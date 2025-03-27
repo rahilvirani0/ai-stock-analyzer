@@ -9,3 +9,4 @@ tensorflow
 scikit-learn
 keras-models
 transformers
+webdriver-manager

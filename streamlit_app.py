@@ -7,6 +7,7 @@ from keras.models import load_model
 from datetime import datetime, timedelta
 import os
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
 # Import the retraining function and backtesting function
 from retrain_stock_model import retrain_stock_model
@@ -169,7 +170,8 @@ if st.sidebar.button("Forecast"):
     )
     
     # Prepare data for the interactive chart: plot full historical data and forecast
-    forecast_dates = pd.date_range(start=stock_data.index[-1] + timedelta(days=1), periods=forecast_horizon)
+    last_date = stock_data.index[-1]
+    forecast_dates = pd.date_range(start=last_date + timedelta(days=1), periods=forecast_horizon)
     df_hist = pd.DataFrame({'Price': stock_data['Close'].values.flatten()}, index=stock_data.index)
     df_forecast = pd.DataFrame({'Price': base_forecast}, index=forecast_dates)
     forecastColor = 'blue'
@@ -179,41 +181,43 @@ if st.sidebar.button("Forecast"):
     elif metrics['current_price'] > metrics['forecast_price']:
         forecastColor = '#ff1818'
     
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df_hist.index, y=df_hist['Price'],
-                             mode='lines', name="Historical", line=dict(color='#6a6a6a')))
-    fig.add_trace(go.Scatter(x=df_forecast.index, y=df_forecast['Price'],
-                             mode='lines', name="Forecast", line=dict(color=forecastColor)))
+    # Create a Plotly figure with secondary y-axis for sentiment
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-        # --- Add News Sentiment Markers on Historical Data ---
-    from news_sentiment import analyze_news
+    # Add historical and forecast price traces on primary y-axis
+    fig.add_trace(go.Scatter(
+        x=df_hist.index, y=df_hist['Price'],
+        mode='lines', name="Historical",
+        line=dict(color='#6a6a6a')
+    ), secondary_y=False)
+    
+    fig.add_trace(go.Scatter(
+        x=df_forecast.index, y=df_forecast['Price'],
+        mode='lines', name="Forecast",
+        line=dict(color=forecastColor)
+    ), secondary_y=False)
+    
+    # --- Add News Sentiment Markers on Historical Data ---
     news_results = analyze_news(selected_ticker)
-    # Process news: convert news dates to datetime and assign to historical data if within range.
     news_markers = []
     for news in news_results:
         try:
             news_date = datetime.strptime(news["date"], "%Y-%m-%d")
         except Exception:
             continue
-        # Only include news that fall within the historical data range.
         if news_date < stock_data.index[0] or news_date > stock_data.index[-1]:
             continue
-        # Find the closest date in the historical index.
         nearest_date = min(stock_data.index, key=lambda d: abs(d - news_date))
         price_at_date = stock_data.loc[nearest_date, "Close"]
         news_markers.append({"date": nearest_date, "price": price_at_date, "news": news})
     
-    # Group news markers by date to handle overlapping markers.
     from collections import defaultdict
     grouped_markers = defaultdict(list)
     for marker in news_markers:
         grouped_markers[marker["date"]].append(marker)
     
-    # Define a small offset based on price range.
     price_range = stock_data["Close"].max() - stock_data["Close"].min()
-    offset_step = price_range * 0.01  # increased offset step for better visibility
-    
-    # For each date group, add markers with a vertical offset.
+    offset_step = price_range * 0.01
     for date, markers in grouped_markers.items():
         n = len(markers)
         for i, marker in enumerate(markers):
@@ -221,7 +225,6 @@ if st.sidebar.button("Forecast"):
             x_val = marker["date"]
             y_val = marker["price"] + offset
             sentiment = marker["news"]["sentiment"].lower()
-            # Choose marker symbol, color, and orientation based on sentiment:
             if sentiment == "positive":
                 symbol = "triangle-up"
                 color = "#00cc00"
@@ -244,8 +247,79 @@ if st.sidebar.button("Forecast"):
                     f"Sentiment: {marker['news']['sentiment']}<br>"
                     f"Confidence: {marker['news']['score']:.2f}<extra></extra>"
                 )
-            ))
-
+            ), secondary_y=False)
+    
+    # --- Advanced News Sentiment Analysis ---
+    st.markdown("<hr>", unsafe_allow_html=True)
+    st.subheader("News Sentiment Analysis")
+    sentiment_forecast = None
+    if news_results:
+        # Convert news_results to a DataFrame for processing
+        news_df = pd.DataFrame(news_results)
+        news_df['date'] = pd.to_datetime(news_df['date'], errors='coerce')
+        news_df = news_df.dropna(subset=['date'])
+        
+        # Map sentiment text to a numeric value: positive=1, neutral=0, negative=-1
+        sentiment_mapping = {'positive': 1, 'negative': -1, 'neutral': 0}
+        news_df['numeric_sentiment'] = news_df['sentiment'].str.lower().map(sentiment_mapping)
+        
+        # Sort by date and compute days difference from the latest date
+        news_df = news_df.sort_values('date')
+        max_date = news_df['date'].max()
+        news_df['days_diff'] = (max_date - news_df['date']).dt.days
+        
+        # Compute exponentially decaying weights (Weighted Sentiment)
+        decay_lambda = 0.1  # adjust decay rate as needed
+        news_df['weight'] = np.exp(-decay_lambda * news_df['days_diff'])
+        weighted_sentiment = (news_df['numeric_sentiment'] * news_df['weight']).sum() / news_df['weight'].sum()
+        
+        # Group by date (daily average sentiment)
+        daily_sentiment = news_df.groupby(news_df['date'].dt.date)['numeric_sentiment'].mean().reset_index()
+        daily_sentiment['date'] = pd.to_datetime(daily_sentiment['date'])
+        daily_sentiment = daily_sentiment.sort_values('date')
+        
+        # Calculate short-term and long-term EMAs on daily sentiment
+        short_span = 3
+        long_span = 10
+        daily_sentiment['short_ema'] = daily_sentiment['numeric_sentiment'].ewm(span=short_span, adjust=False).mean()
+        daily_sentiment['long_ema'] = daily_sentiment['numeric_sentiment'].ewm(span=long_span, adjust=False).mean()
+        daily_sentiment['momentum'] = daily_sentiment['short_ema'] - daily_sentiment['long_ema']
+        
+        latest_momentum = daily_sentiment.iloc[-1]['momentum']
+        # Combined Indicator: sum of weighted sentiment and latest momentum
+        combined_indicator = weighted_sentiment + latest_momentum
+        
+        # Compute a sentiment forecast over the forecast horizon.
+        # Here we assume a simple linear forecast:
+        sentiment_forecast = combined_indicator + np.linspace(0, latest_momentum, forecast_horizon)
+        
+        # Display the advanced news sentiment metrics
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            st.metric("Weighted Sentiment", f"{weighted_sentiment:.3f}")
+        with col2:
+            st.metric("Short EMA", f"{daily_sentiment.iloc[-1]['short_ema']:.3f}")
+        with col3:
+            st.metric("Long EMA", f"{daily_sentiment.iloc[-1]['long_ema']:.3f}")
+        with col4:
+            st.metric("Momentum", f"{latest_momentum:.3f}")
+        with col5:
+            st.metric("Combined Indicator", f"{combined_indicator:.3f}")
+        
+        overall_sentiment = compute_overall_sentiment(news_results)
+        st.markdown(f"**Overall News Sentiment:** {overall_sentiment}")
+    
+    # --- Overlay Sentiment Forecast on Graph ---
+    # If sentiment forecast is available, add it to the figure on the secondary y-axis.
+    if sentiment_forecast is not None:
+        fig.add_trace(go.Scatter(
+            x=forecast_dates, y=sentiment_forecast,
+            mode='lines', name="Sentiment Forecast",
+            line=dict(color='purple', dash='dash')
+        ), secondary_y=True)
+        # Set a fixed range for sentiment axis (adjust as needed)
+        fig.update_yaxes(title_text="Price", secondary_y=False)
+        fig.update_yaxes(title_text="Sentiment", secondary_y=True, range=[-1.5, 1.5])
     
     first_visible = stock_data.index[-1] - pd.Timedelta(days=forecast_horizon)
     last_visible = forecast_dates[-1]
@@ -271,16 +345,13 @@ if st.sidebar.button("Forecast"):
         st.metric("Risk Assessment", metrics['risk_assessment'])
         st.metric("Model Accuracy", f"RMSE: ${rmse:.2f}, MAPE: {mape:.2f}%")
     
-    # --- News Sentiment Summary ---
-    from news_sentiment import compute_overall_sentiment
-    overall_sentiment = compute_overall_sentiment(news_results)
-    st.markdown(f"**News Sentiment Summary:** {overall_sentiment}")
-    
     # --- Detailed News Section ---
     if news_results:
         st.subheader("News Details")
-        news_df = pd.DataFrame(news_results)
-        st.dataframe(news_df)
+        if 'news_df' in locals():
+            st.dataframe(news_df)
+        else:
+            st.dataframe(pd.DataFrame(news_results))
     else:
         st.info("No news data available for this ticker.")
 else:
