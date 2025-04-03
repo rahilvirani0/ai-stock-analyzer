@@ -292,6 +292,22 @@ if st.sidebar.button("Forecast"):
         # Compute a sentiment forecast over the forecast horizon.
         # Here we assume a simple linear forecast:
         sentiment_forecast = combined_indicator + np.linspace(0, latest_momentum, forecast_horizon)
+        
+        # Display the advanced news sentiment metrics
+        col1, col2, col3, col4, col5 = st.columns(5)
+        with col1:
+            st.metric("Weighted Sentiment", f"{weighted_sentiment:.3f}")
+        with col2:
+            st.metric("Short EMA", f"{daily_sentiment.iloc[-1]['short_ema']:.3f}")
+        with col3:
+            st.metric("Long EMA", f"{daily_sentiment.iloc[-1]['long_ema']:.3f}")
+        with col4:
+            st.metric("Momentum", f"{latest_momentum:.3f}")
+        with col5:
+            st.metric("Combined Indicator", f"{combined_indicator:.3f}")
+        
+        overall_sentiment = compute_overall_sentiment(news_results)
+        st.markdown(f"**Overall News Sentiment:** {overall_sentiment}")
     
     # --- Overlay Sentiment Forecast on Graph ---
     # If sentiment forecast is available, add it to the figure on the secondary y-axis.
@@ -328,19 +344,6 @@ if st.sidebar.button("Forecast"):
     with col3:
         st.metric("Risk Assessment", metrics['risk_assessment'])
         st.metric("Model Accuracy", f"RMSE: ${rmse:.2f}, MAPE: {mape:.2f}%")
-
-    # Display the advanced news sentiment metrics
-        col1, col2, col3, col4, col5 = st.columns(5)
-        with col1:
-            st.metric("Weighted Sentiment", f"{weighted_sentiment:.3f}")
-        with col2:
-            st.metric("Short EMA", f"{daily_sentiment.iloc[-1]['short_ema']:.3f}")
-        with col3:
-            st.metric("Long EMA", f"{daily_sentiment.iloc[-1]['long_ema']:.3f}")
-        with col4:
-            st.metric("Momentum", f"{latest_momentum:.3f}")
-        with col5:
-            st.metric("Combined Indicator", f"{combined_indicator:.3f}")
     
     # --- Detailed News Section ---
     if news_results:
