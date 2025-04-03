@@ -9,18 +9,20 @@ import os
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# Import the retraining function and backtesting function
+# Import our custom modules for model retraining and evaluation
 from retrain_stock_model import retrain_stock_model
 from backtest_model import backtest_model_accuracy
-# Import news sentiment functions
+# Import sentiment analysis functions
 from news_sentiment import analyze_news, compute_overall_sentiment
 
+# Set up the Streamlit page
 st.set_page_config(page_title="Canadian Stock Forecast", page_icon="📈", layout="wide")
 st.title("Canadian Stock Forecast")
 
 # --- Forecaster Class ---
 class StockForecaster:
     def __init__(self, time_step=100, base_model_path='canadian_market_base_model.h5'):
+        # Initialize core parameters for the forecasting model
         self.time_step = time_step
         self.base_model_path = base_model_path
         self.scaler = MinMaxScaler(feature_range=(0, 1))
@@ -29,6 +31,7 @@ class StockForecaster:
         self.test_loss = None
 
     def download_data(self, ticker, start_date='2014-02-21', end_date=None):
+        # Get historical stock data from Yahoo Finance
         if end_date is None:
             yesterday = datetime.now() - timedelta(days=1)
             end_date = yesterday.strftime('%Y-%m-%d')
@@ -42,12 +45,14 @@ class StockForecaster:
             return None
 
     def prepare_data(self, stock_data):
+        # Process raw data for model input - calculate volatility and scale values
         stock_data['Daily_Return'] = stock_data['Close'].pct_change()
         self.daily_volatility = stock_data['Daily_Return'].std()
         scaled_data = self.scaler.fit_transform(stock_data['Close'].values.reshape(-1, 1))
         return stock_data, scaled_data
 
     def load_or_retrain_model(self, ticker):
+        # Check for a recent model or retrain as needed
         today_str = datetime.now().strftime("%Y-%m-%d")
         model_folder = "stock-models"
         model_filename = f"{ticker}_fine_tuned_model_{today_str}.h5"
@@ -80,6 +85,7 @@ class StockForecaster:
             return True
 
     def generate_forecast(self, stock_data, scaled_data, forecast_days=180):
+        # Generate price predictions with some randomness to simulate real market behavior
         if self.model is None:
             st.error("No model available.")
             return None
@@ -106,6 +112,7 @@ class StockForecaster:
         return base_forecast
 
     def calculate_forecast_metrics(self, ticker, stock_data, base_forecast):
+        # Calculate key metrics and risk assessment from forecast data
         last_date = stock_data.index[-1]
         forecast_dates = pd.date_range(start=last_date + timedelta(days=1), periods=len(base_forecast))
         current_price = float(stock_data['Close'].iloc[-1])
@@ -128,6 +135,7 @@ class StockForecaster:
         return metrics
 
 # --- Sidebar ---
+# Define available Canadian stocks and user controls
 canadian_tickers = [
     'AC.TO', 'RY.TO', 'TD.TO', 'ENB.TO', 'SU.TO', 'BMO.TO', 'CP.TO',
     'BNS.TO', 'BCE.TO', 'CM.TO', 'TRP.TO', 'MFC.TO', 'T.TO', 'FTS.TO',
@@ -139,6 +147,7 @@ forecast_horizon = st.sidebar.slider("Forecast Days", min_value=30, max_value=36
 
 # --- Main Flow ---
 if st.sidebar.button("Forecast"):
+    # Initialize forecaster and start prediction process
     forecaster = StockForecaster()
     if not os.path.exists(forecaster.base_model_path):
         st.error("Base model not found.")
@@ -160,7 +169,7 @@ if st.sidebar.button("Forecast"):
         st.error("Forecast generation failed.")
         st.stop()
     
-    # Backtest model accuracy using a 30-day backtest window
+    # Run backtesting to evaluate model accuracy
     rmse, mape = backtest_model_accuracy(
         forecaster.model,
         forecaster.scaler,
@@ -169,7 +178,7 @@ if st.sidebar.button("Forecast"):
         forecast_horizon=30
     )
     
-    # Prepare data for the interactive chart: plot full historical data and forecast
+    # Prepare data for the interactive chart
     last_date = stock_data.index[-1]
     forecast_dates = pd.date_range(start=last_date + timedelta(days=1), periods=forecast_horizon)
     df_hist = pd.DataFrame({'Price': stock_data['Close'].values.flatten()}, index=stock_data.index)
@@ -177,14 +186,14 @@ if st.sidebar.button("Forecast"):
     forecastColor = 'blue'
     metrics = forecaster.calculate_forecast_metrics(selected_ticker, stock_data, base_forecast)
     if metrics['forecast_price'] > metrics['current_price']:
-        forecastColor = '#39FF14'
+        forecastColor = '#39FF14'  # Bright green for bullish forecast
     elif metrics['current_price'] > metrics['forecast_price']:
-        forecastColor = '#ff1818'
+        forecastColor = '#ff1818'  # Red for bearish forecast
     
-    # Create a Plotly figure with secondary y-axis for sentiment
+    # Create chart with both price and sentiment overlay
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     
-    # Add historical and forecast price traces on primary y-axis
+    # Add historical and forecast price traces
     fig.add_trace(go.Scatter(
         x=df_hist.index, y=df_hist['Price'],
         mode='lines', name="Historical",
@@ -198,6 +207,7 @@ if st.sidebar.button("Forecast"):
     ), secondary_y=False)
     
     # --- Add News Sentiment Markers on Historical Data ---
+    # Get news and mark it on the chart with symbols
     news_results = analyze_news(selected_ticker)
     news_markers = []
     for news in news_results:
@@ -211,11 +221,13 @@ if st.sidebar.button("Forecast"):
         price_at_date = stock_data.loc[nearest_date, "Close"]
         news_markers.append({"date": nearest_date, "price": price_at_date, "news": news})
     
+    # Group markers by date to avoid overlapping
     from collections import defaultdict
     grouped_markers = defaultdict(list)
     for marker in news_markers:
         grouped_markers[marker["date"]].append(marker)
     
+    # Add markers with sentiment colors to the chart
     price_range = stock_data["Close"].max() - stock_data["Close"].min()
     offset_step = price_range * 0.01
     for date, markers in grouped_markers.items():
@@ -250,35 +262,36 @@ if st.sidebar.button("Forecast"):
             ), secondary_y=False)
     
     # --- Advanced News Sentiment Analysis ---
+    # Process and display sentiment metrics
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("News Sentiment Analysis")
     sentiment_forecast = None
     if news_results:
-        # Convert news_results to a DataFrame for processing
+        # Create dataframe and clean up dates
         news_df = pd.DataFrame(news_results)
         news_df['date'] = pd.to_datetime(news_df['date'], errors='coerce')
         news_df = news_df.dropna(subset=['date'])
         
-        # Map sentiment text to a numeric value: positive=1, neutral=0, negative=-1
+        # Convert sentiment text to numeric values
         sentiment_mapping = {'positive': 1, 'negative': -1, 'neutral': 0}
         news_df['numeric_sentiment'] = news_df['sentiment'].str.lower().map(sentiment_mapping)
         
-        # Sort by date and compute days difference from the latest date
+        # Sort and calculate time differences for weighting
         news_df = news_df.sort_values('date')
         max_date = news_df['date'].max()
         news_df['days_diff'] = (max_date - news_df['date']).dt.days
         
-        # Compute exponentially decaying weights (Weighted Sentiment)
-        decay_lambda = 0.1  # adjust decay rate as needed
+        # Apply exponential decay weighting to prioritize recent news
+        decay_lambda = 0.1
         news_df['weight'] = np.exp(-decay_lambda * news_df['days_diff'])
         weighted_sentiment = (news_df['numeric_sentiment'] * news_df['weight']).sum() / news_df['weight'].sum()
         
-        # Group by date (daily average sentiment)
+        # Calculate daily sentiment averages
         daily_sentiment = news_df.groupby(news_df['date'].dt.date)['numeric_sentiment'].mean().reset_index()
         daily_sentiment['date'] = pd.to_datetime(daily_sentiment['date'])
         daily_sentiment = daily_sentiment.sort_values('date')
         
-        # Calculate short-term and long-term EMAs on daily sentiment
+        # Calculate exponential moving averages for trend detection
         short_span = 3
         long_span = 10
         daily_sentiment['short_ema'] = daily_sentiment['numeric_sentiment'].ewm(span=short_span, adjust=False).mean()
@@ -286,14 +299,13 @@ if st.sidebar.button("Forecast"):
         daily_sentiment['momentum'] = daily_sentiment['short_ema'] - daily_sentiment['long_ema']
         
         latest_momentum = daily_sentiment.iloc[-1]['momentum']
-        # Combined Indicator: sum of weighted sentiment and latest momentum
+        # Combine weighted sentiment with momentum for a fuller picture
         combined_indicator = weighted_sentiment + latest_momentum
         
-        # Compute a sentiment forecast over the forecast horizon.
-        # Here we assume a simple linear forecast:
+        # Project sentiment into the future using momentum
         sentiment_forecast = combined_indicator + np.linspace(0, latest_momentum, forecast_horizon)
         
-        # Display the advanced news sentiment metrics
+        # Display key sentiment metrics
         col1, col2, col3, col4, col5 = st.columns(5)
         with col1:
             st.metric("Weighted Sentiment", f"{weighted_sentiment:.3f}")
@@ -310,17 +322,18 @@ if st.sidebar.button("Forecast"):
         st.markdown(f"**Overall News Sentiment:** {overall_sentiment}")
     
     # --- Overlay Sentiment Forecast on Graph ---
-    # If sentiment forecast is available, add it to the figure on the secondary y-axis.
+    # Add sentiment forecast line to chart
     if sentiment_forecast is not None:
         fig.add_trace(go.Scatter(
             x=forecast_dates, y=sentiment_forecast,
             mode='lines', name="Sentiment Forecast",
             line=dict(color='purple', dash='dash')
         ), secondary_y=True)
-        # Set a fixed range for sentiment axis (adjust as needed)
+        # Configure axis labels
         fig.update_yaxes(title_text="Price", secondary_y=False)
         fig.update_yaxes(title_text="Sentiment", secondary_y=True, range=[-1.5, 1.5])
     
+    # Set chart display window and styling
     first_visible = stock_data.index[-1] - pd.Timedelta(days=forecast_horizon)
     last_visible = forecast_dates[-1]
     fig.update_layout(
@@ -332,6 +345,7 @@ if st.sidebar.button("Forecast"):
     st.plotly_chart(fig, use_container_width=True)
     
     # --- Forecast Summary Section ---
+    # Display key metrics and model performance
     st.markdown("<hr>", unsafe_allow_html=True)
     st.subheader("Forecast Summary")
     col1, col2, col3 = st.columns([0.5, 0.5, 1])
@@ -346,6 +360,7 @@ if st.sidebar.button("Forecast"):
         st.metric("Model Accuracy", f"RMSE: ${rmse:.2f}, MAPE: {mape:.2f}%")
     
     # --- Detailed News Section ---
+    # Show underlying news data if available
     if news_results:
         st.subheader("News Details")
         if 'news_df' in locals():
