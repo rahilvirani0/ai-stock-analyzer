@@ -1,4 +1,3 @@
-# news_sentiment.py
 import requests
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
@@ -16,7 +15,7 @@ from webdriver_manager.firefox import GeckoDriverManager
 
 from transformers import pipeline, AutoTokenizer, TFAutoModelForSequenceClassification
 
-# Initialize the sentiment analysis pipeline using TensorFlow classes
+# Initialize the sentiment analysis model for financial news
 sentiment_pipe = pipeline(
     "text-classification",
     model="mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis",
@@ -31,6 +30,7 @@ def create_selenium_driver():
     Create a Selenium WebDriver with robust error handling.
     """
     try:
+        # Setup Firefox in headless mode
         firefoxOptions = Options()
         firefoxOptions.add_argument("--headless")
         firefoxOptions.add_argument("--no-sandbox")
@@ -55,6 +55,7 @@ def get_headlines_fallback(ticker):
     url = f"https://finance.yahoo.com/quote/{ticker}/latest-news/"
     
     try:
+        # Add user agent to avoid being blocked
         headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }
@@ -64,28 +65,33 @@ def get_headlines_fallback(ticker):
             st.error(f"Failed to fetch news. Status code: {response.status_code}")
             return []
         
+        # Parse the HTML content
         soup = BeautifulSoup(response.content, "html.parser")
         stream_items = soup.find_all("section", class_="container sz-x-large stream yf-82qtw3 responsive")
         
         def convert_relative_to_date(relative_str):
+            # Convert relative time strings to actual dates
             today = datetime.today()
 
             if "yesterday" in relative_str.lower():
                 exact_date = today - timedelta(days=1)
                 return exact_date.strftime('%Y-%m-%d')
 
+            # Extract hours from strings like "2 hours ago"
             match = re.search(r'(\d+)\s+hour', relative_str)
             if match:
                 hours = int(match.group(1))
                 exact_datetime = today - timedelta(hours=hours)
                 return exact_datetime.strftime('%Y-%m-%d')
 
+            # Extract minutes from strings like "5 minutes ago"
             match = re.search(r'(\d+)\s+minute', relative_str)
             if match:
                 minutes = int(match.group(1))
                 exact_datetime = today - timedelta(minutes=minutes)
                 return exact_datetime.strftime('%Y-%m-%d')
 
+            # Extract days from strings like "3 days ago"
             match = re.search(r'(\d+)\s+day', relative_str)
             if match:
                 days = int(match.group(1))
@@ -94,6 +100,7 @@ def get_headlines_fallback(ticker):
 
             return relative_str  # Already in date format (e.g., "2025-03-25")
 
+        # Extract headlines and dates
         headlines_array = []
         for item in stream_items:
             # Skip ad items
@@ -161,6 +168,7 @@ def get_headlines(ticker):
             return get_headlines_fallback(ticker)
 
         def convert_relative_to_date(relative_str):
+            # More comprehensive date conversion function
             today = datetime.now()
 
             # Check for "yesterday"
@@ -210,6 +218,7 @@ def get_headlines(ticker):
             # Fallback: return today's date if no pattern matched
             return today.strftime('%Y-%m-%d')
 
+        # Process news items
         headlines_array = []
         for item in stream_items:
             # Skip ad items
@@ -267,6 +276,7 @@ def analyze_news(ticker):
       - sentiment (label)
       - score (confidence score)
     """
+    # Get headlines for the ticker
     headlines = get_headlines(ticker)
     
     # If no headlines found, return empty list
@@ -274,6 +284,7 @@ def analyze_news(ticker):
         st.warning(f"No news headlines found for ticker {ticker}")
         return []
     
+    # Run sentiment analysis on each headline
     results = []
     for item in headlines:
         text = item['headline']
@@ -294,11 +305,13 @@ def compute_overall_sentiment(news_results):
     if not news_results:
         return "No news data available."
 
+    # Count occurrences of each sentiment label
     sentiment_counts = {}
     for res in news_results:
         label = res['sentiment']
         sentiment_counts[label] = sentiment_counts.get(label, 0) + 1
 
+    # Find the most frequent sentiment
     majority_sentiment = max(sentiment_counts, key=sentiment_counts.get)
     return f"Overall News Sentiment: {majority_sentiment} ({sentiment_counts[majority_sentiment]} articles)"
 

@@ -1,4 +1,3 @@
-# retrain_stock_model.py
 import yfinance as yf
 import numpy as np
 import pandas as pd
@@ -46,6 +45,7 @@ def retrain_stock_model(base_model_path, target_ticker, epochs=8, time_step=100,
     print(f"Downloading data for {target_ticker}...")
     stock_data = yf.download(target_ticker, start='2014-02-21', end=end_date)
 
+    # Make sure we have enough data to train
     if len(stock_data) < 200:
         print(f"Not enough data for {target_ticker}")
         return False
@@ -61,7 +61,7 @@ def retrain_stock_model(base_model_path, target_ticker, epochs=8, time_step=100,
         y.append(scaled_data[i + time_step, 0])
     X, y = np.array(X), np.array(y)
 
-    # Split data into training and testing sets
+    # Split data into training and testing sets (80/20)
     train_size = 0.8
     X_train = X[:int(X.shape[0] * train_size)]
     X_test = X[int(X.shape[0] * train_size):]
@@ -76,7 +76,7 @@ def retrain_stock_model(base_model_path, target_ticker, epochs=8, time_step=100,
     print(f"Loading base model from {base_model_path}...")
     model = load_model(base_model_path)
 
-    # Recompile to reinitialize the optimizer’s state
+    # Recompile to reinitialize the optimizer's state
     model.compile(optimizer='adam', loss='mse')
 
     # Fine-tune model on target ticker's data
@@ -99,7 +99,7 @@ def retrain_stock_model(base_model_path, target_ticker, epochs=8, time_step=100,
     fine_tuned_filename = f"{target_ticker}_fine_tuned_model_{today_str}.h5"
     fine_tuned_path = os.path.join(model_folder, fine_tuned_filename)
 
-    # Delete older models for the same stock (if any)
+    # Delete older models for the same stock (cleanup)
     pattern = os.path.join(model_folder, f"{target_ticker}_fine_tuned_model_*.h5")
     old_models = glob.glob(pattern)
     for old_model in old_models:
