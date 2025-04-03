@@ -51,6 +51,17 @@ The model development followed multiple iterations:
 - Loss function comparison (MSE vs. MAE)
 - Adding noise to make predictions more realistic
 
+LSTM iterations:
+- https://colab.research.google.com/drive/1JNNzgOia4PaljSmQDQrieY5PBEexYhzl?usp=sharing
+- https://colab.research.google.com/drive/16Hx3JqDXi_RuACs70ScIH4CL06Bl5xPb?usp=sharing
+- https://colab.research.google.com/drive/1WSi3aGgK9PFxxZkrwU0LAzqeXCav73Ya?usp=sharing
+- https://colab.research.google.com/drive/1nHizkou2rZHfev-kctzRlMpK9GvphG4J?usp=sharing
+- https://colab.research.google.com/drive/1g8tRN-5ETr1fl9C7rIIFt1Acjm84cPlb?usp=sharing
+- https://colab.research.google.com/drive/1zbOxZll0iakWiSJFt3Cc34B39aXJ0gqZ?usp=sharing
+- https://colab.research.google.com/drive/1qg5_bbK1URQ8VZQu-OtWnVkk8a61C_8P?usp=sharing
+- https://colab.research.google.com/drive/1yVLqTw-OpCyjiYo2RAq11wcHyfsXIIXt?usp=sharing
+Final model: https://colab.research.google.com/drive/1Cq3yVvVwfjOtR84juY3xkGi2k8yFhncB?usp=sharing
+
 ### 2. News Sentiment Integration
 To incorporate market sentiment, I implemented:
 - A web scraper for Yahoo Finance news using both Selenium and a fallback method
