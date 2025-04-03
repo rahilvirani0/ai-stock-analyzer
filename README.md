@@ -65,7 +65,7 @@ Final model: https://colab.research.google.com/drive/1Cq3yVvVwfjOtR84juY3xkGi2k8
 ### 2. News Sentiment Integration
 To incorporate market sentiment, I implemented:
 - A web scraper for Yahoo Finance news using both Selenium and a fallback method
-- Integration with the HuggingFace DistilRoBERTa model fine-tuned for financial sentiment
+- Integration with the HuggingFace DistilRoBERTa model fine-tuned for financial sentiment (https://huggingface.co/mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis)
 - Development of time-weighted sentiment metrics to prioritize recent news
 - Creation of exponential moving averages to detect sentiment momentum
 
@@ -202,3 +202,7 @@ The UI components display:
 ---
 
 This project represents my exploration of combining traditional time-series forecasting with sentiment analysis to create a more holistic market prediction tool. While no model can perfectly predict the market, this approach provides valuable context by incorporating both price patterns and market sentiment.
+
+References:
+- https://huggingface.co/mrm8488/distilroberta-finetuned-financial-news-sentiment-analysis
+- https://chatgpt.com/
